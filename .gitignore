@@ -1,0 +1,4 @@
+*.DS_Store
+github-project-exporter
+dist/
+vendor/
