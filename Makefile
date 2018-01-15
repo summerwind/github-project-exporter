@@ -1,5 +1,5 @@
 NAME=github-project-exporter
-VERSION=0.1.0
+VERSION=0.2.0
 COMMIT=$(shell git rev-parse --verify HEAD)
 
 PACKAGES=$(shell go list ./...)
