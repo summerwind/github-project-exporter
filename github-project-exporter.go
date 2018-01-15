@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/github"
 	"github.com/prometheus/client_golang/prometheus"
@@ -69,13 +70,33 @@ var (
 	)
 )
 
+type cache struct {
+	expires        time.Time
+	orgProjects    map[string][]*github.Project
+	repoProjects   map[string][]*github.Project
+	projectColumns map[int][]*github.ProjectColumn
+	projectCards   map[int][]*github.ProjectCard
+}
+
+func newCache(ttl int) *cache {
+	return &cache{
+		expires:        time.Now().Add(time.Duration(ttl) * time.Second),
+		orgProjects:    map[string][]*github.Project{},
+		repoProjects:   map[string][]*github.Project{},
+		projectColumns: map[int][]*github.ProjectColumn{},
+		projectCards:   map[int][]*github.ProjectCard{},
+	}
+}
+
 type Exporter struct {
 	client *github.Client
 	orgs   []string
 	repos  []string
+	ttl    int
+	cache  *cache
 }
 
-func NewExporter(token string, orgs []string, repos []string) (*Exporter, error) {
+func NewExporter(token string, orgs []string, repos []string, ttl int) (*Exporter, error) {
 	if token == "" {
 		return nil, errors.New("invalid token")
 	}
@@ -93,6 +114,10 @@ func NewExporter(token string, orgs []string, repos []string) (*Exporter, error)
 		}
 	}
 
+	if ttl < 0 {
+		return nil, errors.New("invalid TTL")
+	}
+
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -103,6 +128,7 @@ func NewExporter(token string, orgs []string, repos []string) (*Exporter, error)
 		client: client,
 		orgs:   orgs,
 		repos:  repos,
+		ttl:    ttl,
 	}, nil
 }
 
@@ -116,11 +142,22 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	var err error
+
+	if e.cache == nil || e.cache.expires.Before(time.Now()) {
+		e.cache = newCache(e.ttl)
+		log.Debugln("Reset cache")
+	}
+
 	for _, org := range e.orgs {
-		projects, err := e.getOrganizationProjects(org)
-		if err != nil {
-			log.Errorln(err)
-			continue
+		projects, ok := e.cache.orgProjects[org]
+		if !ok {
+			projects, err = e.getOrganizationProjects(org)
+			if err != nil {
+				log.Errorln(err)
+				continue
+			}
+			e.cache.orgProjects[org] = projects
 		}
 
 		ch <- prometheus.MustNewConstMetric(
@@ -128,10 +165,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		)
 
 		for _, project := range projects {
-			columns, err := e.getProjectColumns(*project.ID)
-			if err != nil {
-				log.Errorln(err)
-				continue
+			columns, ok := e.cache.projectColumns[*project.ID]
+			if !ok {
+				columns, err = e.getProjectColumns(*project.ID)
+				if err != nil {
+					log.Errorln(err)
+					continue
+				}
+				e.cache.projectColumns[*project.ID] = columns
 			}
 
 			ch <- prometheus.MustNewConstMetric(
@@ -139,10 +180,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			)
 
 			for _, column := range columns {
-				cards, err := e.getProjectCards(*column.ID)
-				if err != nil {
-					log.Errorln(err)
-					continue
+				cards, ok := e.cache.projectCards[*column.ID]
+				if !ok {
+					cards, err = e.getProjectCards(*column.ID)
+					if err != nil {
+						log.Errorln(err)
+						continue
+					}
+					e.cache.projectCards[*column.ID] = cards
 				}
 
 				ch <- prometheus.MustNewConstMetric(
@@ -153,10 +198,16 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, repo := range e.repos {
-		projects, err := e.getRepositoryProjects(repo)
-		if err != nil {
-			log.Errorln(err)
-			continue
+		var err error
+
+		projects, ok := e.cache.repoProjects[repo]
+		if !ok {
+			projects, err = e.getRepositoryProjects(repo)
+			if err != nil {
+				log.Errorln(err)
+				continue
+			}
+			e.cache.repoProjects[repo] = projects
 		}
 
 		ch <- prometheus.MustNewConstMetric(
@@ -164,10 +215,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		)
 
 		for _, project := range projects {
-			columns, err := e.getProjectColumns(*project.ID)
-			if err != nil {
-				log.Errorln(err)
-				continue
+			columns, ok := e.cache.projectColumns[*project.ID]
+			if !ok {
+				columns, err = e.getProjectColumns(*project.ID)
+				if err != nil {
+					log.Errorln(err)
+					continue
+				}
+				e.cache.projectColumns[*project.ID] = columns
 			}
 
 			ch <- prometheus.MustNewConstMetric(
@@ -175,10 +230,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			)
 
 			for _, column := range columns {
-				cards, err := e.getProjectCards(*column.ID)
-				if err != nil {
-					log.Errorln(err)
-					continue
+				cards, ok := e.cache.projectCards[*column.ID]
+				if !ok {
+					cards, err = e.getProjectCards(*column.ID)
+					if err != nil {
+						log.Errorln(err)
+						continue
+					}
+					e.cache.projectCards[*column.ID] = cards
 				}
 
 				ch <- prometheus.MustNewConstMetric(
@@ -314,6 +373,7 @@ func main() {
 	cmd.Flags().String("github.token", "", "GitHub access token")
 	cmd.Flags().StringSlice("github.organization", []string{}, "Organization name")
 	cmd.Flags().StringSlice("github.repository", []string{}, "Repository name")
+	cmd.Flags().Int("github.cache-ttl", 60, "Cache TTL of GitHub API response (seconds)")
 	cmd.Flags().String("web.listen-address", "0.0.0.0:9410", "Address to listen on for web interface and telemetry")
 	cmd.Flags().String("web.telemetry-path", "/metrics", "Path under which to expose metrics")
 	cmd.Flags().Bool("version", false, "Display version information and exit")
@@ -364,7 +424,12 @@ func run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	exporter, err := NewExporter(token, orgs, repos)
+	ttl, err := cmd.Flags().GetInt("github.cache-ttl")
+	if err != nil {
+		return err
+	}
+
+	exporter, err := NewExporter(token, orgs, repos, ttl)
 	if err != nil {
 		return err
 	}
