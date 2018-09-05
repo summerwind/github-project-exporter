@@ -47,4 +47,4 @@ tasks:
       - dep ensure -v
   clean:
     cmds:
-      - rm -rf github-project-exporter dist cover.out
+      - rm -rf {{.NAME}} dist cover.out
