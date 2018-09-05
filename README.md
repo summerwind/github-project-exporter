@@ -16,10 +16,11 @@ $ docker pull summerwind/github-project-exporter:latest
 
 ### Building binary yourself
 
-To build the binary you need to install [Go](https://golang.org/) and [Glide](https://github.com/Masterminds/glide).
+To build the binary you need to install [Go](https://golang.org/), [dep](https://github.com/golang/dep) and [task](https://github.com/go-task/task).
 
 ```
-$ make
+$ task vendor
+$ task build
 ```
 
 ## Usage
@@ -54,3 +55,4 @@ This exporter will expose these metrics.
 | github_repository_projects | How many projects are in the repository. | repository |
 | github_repository_project_columns | How many columns are in the repository project. | repository, project |
 | github_repository_project_cards | How many cards are in the repository project. | repository, project, column |
+
