@@ -1,4 +1,5 @@
 *.DS_Store
+cover.out
 github-project-exporter
 dist/
 vendor/
