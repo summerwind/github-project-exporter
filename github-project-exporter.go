@@ -74,8 +74,8 @@ type cache struct {
 	expires        time.Time
 	orgProjects    map[string][]*github.Project
 	repoProjects   map[string][]*github.Project
-	projectColumns map[int][]*github.ProjectColumn
-	projectCards   map[int][]*github.ProjectCard
+	projectColumns map[int64][]*github.ProjectColumn
+	projectCards   map[int64][]*github.ProjectCard
 }
 
 func newCache(ttl int) *cache {
@@ -83,8 +83,8 @@ func newCache(ttl int) *cache {
 		expires:        time.Now().Add(time.Duration(ttl) * time.Second),
 		orgProjects:    map[string][]*github.Project{},
 		repoProjects:   map[string][]*github.Project{},
-		projectColumns: map[int][]*github.ProjectColumn{},
-		projectCards:   map[int][]*github.ProjectCard{},
+		projectColumns: map[int64][]*github.ProjectColumn{},
+		projectCards:   map[int64][]*github.ProjectCard{},
 	}
 }
 
@@ -313,7 +313,7 @@ func (e *Exporter) getRepositoryProjects(repo string) ([]*github.Project, error)
 	return projects, nil
 }
 
-func (e *Exporter) getProjectColumns(projectID int) ([]*github.ProjectColumn, error) {
+func (e *Exporter) getProjectColumns(projectID int64) ([]*github.ProjectColumn, error) {
 	var columns []*github.ProjectColumn
 
 	opts := &github.ListOptions{
@@ -338,12 +338,14 @@ func (e *Exporter) getProjectColumns(projectID int) ([]*github.ProjectColumn, er
 	return columns, nil
 }
 
-func (e *Exporter) getProjectCards(columnID int) ([]*github.ProjectCard, error) {
+func (e *Exporter) getProjectCards(columnID int64) ([]*github.ProjectCard, error) {
 	var cards []*github.ProjectCard
 
-	opts := &github.ListOptions{
-		Page:    1,
-		PerPage: 100,
+	opts := &github.ProjectCardListOptions{
+		ListOptions: github.ListOptions{
+			Page:    1,
+			PerPage: 100,
+		},
 	}
 
 	for {
