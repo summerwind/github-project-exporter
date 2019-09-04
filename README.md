@@ -16,10 +16,9 @@ $ docker pull summerwind/github-project-exporter:latest
 
 ### Building binary yourself
 
-To build the binary you need to install [Go](https://golang.org/), [dep](https://github.com/golang/dep) and [task](https://github.com/go-task/task).
+To build the binary you need to install [Go](https://golang.org/) and [task](https://github.com/go-task/task).
 
 ```
-$ task vendor
 $ task build
 ```
 
