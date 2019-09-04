@@ -41,9 +41,6 @@ tasks:
       - GOARCH=amd64 GOOS=linux go build {{.BUILD_FLAGS}} .
       - docker build -t summerwind/{{.NAME}}:latest -t summerwind/{{.NAME}}:{{.VERSION}} .
       - rm -rf {{.NAME}}
-  vendor:
-    cmds:
-      - dep ensure -v
   clean:
     cmds:
       - rm -rf {{.NAME}} dist cover.out
